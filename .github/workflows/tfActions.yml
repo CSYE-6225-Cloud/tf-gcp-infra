@@ -20,8 +20,8 @@ jobs:
           node-version: 16.x
           cache: "npm"
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v1
+        run: hashicorp/setup-terraform@v1
       - name: Terraform initialization
-        uses: terrafrom init
+        run: terrafrom init
       - name: Vailidate terraform
-        uses: terraform validate
+        run: terraform validate
