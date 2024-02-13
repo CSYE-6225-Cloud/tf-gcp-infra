@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Install Terraform
-        run: hashicorp/setup-terraform@v1
+        uses: hashicorp/setup-terraform@v1
       - name: Terraform initialization
         run: terrafrom init
       - name: Vailidate terraform
