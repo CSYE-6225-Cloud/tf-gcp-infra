@@ -14,14 +14,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Use Node.Js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 16.x
-          cache: "npm"
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v1
       - name: Terraform initialization
-        uses: terrafrom init
+        run: terraform init
       - name: Vailidate terraform
-        uses: terraform validate
+        run: terraform validate

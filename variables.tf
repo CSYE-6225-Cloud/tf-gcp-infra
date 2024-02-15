@@ -55,4 +55,8 @@ variable "route1_destination_range" {
 
 }
 
+variable "total_count" {
+  type        = number
+  description = "number of vpcs and resources to be created"
 
+}
