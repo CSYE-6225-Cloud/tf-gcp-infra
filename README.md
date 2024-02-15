@@ -35,3 +35,9 @@ Steps to setup infrastructure using terrafrom :
     command: terraform apply
 11. Destroy terraform
     command: terraform destroy
+
+APIs that are enabled:
+NAME TITLE
+
+1. compute.googleapis.com Compute Engine API
+2. oslogin.googleapis.com Cloud OS Login API
