@@ -5,7 +5,8 @@ provider "google" {
 }
 
 resource "google_compute_network" "virtual_private_cloud" {
-  name                            = var.vpc_name
+  count                           = var.total_count
+  name                            = "${var.vpc_name}-${count.index}"
   description                     = "Creating a vpc"
   auto_create_subnetworks         = false
   routing_mode                    = var.routing_mode
@@ -13,24 +14,27 @@ resource "google_compute_network" "virtual_private_cloud" {
 }
 
 resource "google_compute_subnetwork" "subnet_1" {
-  name          = var.subnet_1_name
+  count         = var.total_count
+  name          = "${var.subnet_1_name}-${count.index}"
   description   = "first subnet webapp"
   region        = var.region
-  network       = google_compute_network.virtual_private_cloud.self_link
+  network       = google_compute_network.virtual_private_cloud[count.index].id
   ip_cidr_range = var.subnet1_ip_range
 }
 
 resource "google_compute_subnetwork" "subnet_2" {
-  name          = var.subnet_2_name
+  count         = var.total_count
+  name          = "${var.subnet_2_name}-${count.index}"
   description   = "second subnet db"
   region        = var.region
-  network       = google_compute_network.virtual_private_cloud.self_link
+  network       = google_compute_network.virtual_private_cloud[count.index].id
   ip_cidr_range = var.subnet2_ip_range
 }
 
 resource "google_compute_route" "route_resource" {
-  name             = var.route_1_name
-  network          = google_compute_network.virtual_private_cloud.self_link
+  count            = var.total_count
+  name             = "${var.route_1_name}-${count.index}"
+  network          = google_compute_network.virtual_private_cloud[count.index].id
   dest_range       = var.route1_destination_range
   next_hop_gateway = "default-internet-gateway"
 }

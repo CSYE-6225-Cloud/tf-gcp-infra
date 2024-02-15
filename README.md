@@ -18,7 +18,20 @@ Steps to setup Google Cloud Platfrom (GCP) :
 
 Steps to setup infrastructure using terrafrom :
 
-1. Mention provided - Google
+1. Mention provider - Google
 2. Create VPC using google_compute_network. Make auto_create_subnetworks as false to not create subnetworks automatically and delete_default_routes_on_create as true to delete default routes which are created on terraform apply
 3. Create subnets webapp and db using google_compute_subnetwork
 4. Create route using google_compute_route
+5. Define variables in variables.tf and their values in terraform.tfvars
+6. Initialise terraform
+   command : terraform init
+7. Format terraform files
+   command: terraform fmt
+8. Validate terraform
+   command: terraform validate
+9. Create terraform plan
+   command: terraform plan
+10. Apply terraform
+    command: terraform apply
+11. Destroy terraform
+    command: terraform destroy
