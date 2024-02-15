@@ -15,7 +15,7 @@ resource "google_compute_network" "virtual_private_cloud" {
 
 resource "google_compute_subnetwork" "subnet_1" {
   count         = var.total_count
-  name          = "${var.subnet_1_name}-${count.index}"
+  name          = "${var.subnet_1_name}"
   description   = "first subnet webapp"
   region        = var.region
   network       = google_compute_network.virtual_private_cloud[count.index].id
@@ -24,7 +24,7 @@ resource "google_compute_subnetwork" "subnet_1" {
 
 resource "google_compute_subnetwork" "subnet_2" {
   count         = var.total_count
-  name          = "${var.subnet_2_name}-${count.index}"
+  name          = "${var.subnet_2_name}"
   description   = "second subnet db"
   region        = var.region
   network       = google_compute_network.virtual_private_cloud[count.index].id
