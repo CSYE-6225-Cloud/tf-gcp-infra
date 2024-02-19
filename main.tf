@@ -38,11 +38,3 @@ resource "google_compute_route" "route_resource" {
   dest_range       = var.route1_destination_range
   next_hop_gateway = "default-internet-gateway"
 }
-
-resource "google_compute_route" {
-  count            = var.total_count
-  name             = "${var.route_1_name}-${count.index}"
-  network          = google_compute_network.virtual_private_cloud[count.index].id
-  dest_range       = var.route1_destination_range
-  next_hop_gateway = "default-internet-gateway"
-}
