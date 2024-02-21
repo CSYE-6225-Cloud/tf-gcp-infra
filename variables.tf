@@ -44,6 +44,10 @@ variable "subnet2_ip_range" {
   description = "db subnet ip cidr range"
 }
 
+variable "next_hop_gateway" {
+  type        = string
+  description = "next hop gateway"
+}
 variable "route_1_name" {
   type        = string
   description = "webapp route name"

@@ -41,3 +41,9 @@ NAME TITLE
 
 1. compute.googleapis.com Compute Engine API
 2. oslogin.googleapis.com Cloud OS Login API
+
+
+Adding 2 Firewall rules:
+1. To allow traffic from the internet to the webapp application port 3001. 
+2. To not allow traffic to SSH port (22) from the internet.
+

@@ -36,7 +36,7 @@ resource "google_compute_route" "route_resource" {
   name             = "${var.route_1_name}-${count.index}"
   network          = google_compute_network.virtual_private_cloud[count.index].id
   dest_range       = var.route1_destination_range
-  next_hop_gateway = "default-internet-gateway"
+  next_hop_gateway = var.next_hop_gateway
 }
 
 resource "google_compute_firewall" "allow_traffic_to_port_rule" {
@@ -79,6 +79,7 @@ resource "google_compute_instance" "web_instance" {
   }
 
   depends_on = [
+    google_compute_network.virtual_private_cloud,
     google_compute_firewall.allow_traffic_to_port_rule,
     google_compute_firewall.deny_traffic_to_ssh_rule
   ]
