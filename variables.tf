@@ -60,3 +60,69 @@ variable "total_count" {
   description = "number of vpcs and resources to be created"
 
 }
+
+variable "firewall_Rule_1" {
+  type        = string
+  description = "Name of first firewall rule of subnet 1"
+}
+
+variable "firewall_Rule_2" {
+  type        = string
+  description = "Name of second firewall rule of subnet 2"
+
+}
+
+variable "firewall_1_port" {
+  type        = string
+  description = "Port allowed for first firewall rule"
+}
+
+variable "firewall_2_port" {
+  type        = string
+  description = "Port to be protected for second firewall rule"
+}
+
+variable "firewall_1_protocol" {
+  type        = string
+  description = "Protocol allowed for first firewall rule"
+}
+
+variable "firewall_2_protocol" {
+  type        = string
+  description = "Protocol allowed for second firewall rule"
+}
+
+variable "firewall_source_ranges" {
+  type        = string
+  description = "Source range for firewalls"
+}
+
+variable "google_compute_instance_name" {
+  type        = string
+  description = "Name for the google compute instance"
+}
+
+variable "google_compute_instance_machine_type" {
+  type        = string
+  description = "Machine type for Google instance"
+}
+
+variable "machine_image_name" {
+  type        = string
+  description = "Name of the image to be used by google compute instance"
+}
+
+variable "disk_size" {
+  type        = string
+  description = "size value of the disk"
+}
+
+variable "disk_type" {
+  type        = string
+  description = "type of the disk"
+}
+
+variable "network_interface_network_tier" {
+  type        = string
+  description = "Tier to be configured for network of network interface"
+}
