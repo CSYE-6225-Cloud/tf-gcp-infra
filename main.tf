@@ -14,52 +14,14 @@ resource "google_compute_network" "virtual_private_cloud" {
 }
 
 resource "google_compute_subnetwork" "subnet_1" {
-  name                     = var.subnet_1_name
-  description              = "first subnet webapp"
-  region                   = var.region
-  network                  = google_compute_network.virtual_private_cloud.id
-  ip_cidr_range            = var.subnet1_ip_range
-  # private_ip_google_access = true
-  depends_on = [ google_sql_database_instance.postgres_db_instance ]
-}
-
-# resource "google_compute_subnetwork" "subnet_2" {
-#   name          = var.subnet_2_name
-#   description   = "second subnet db"
-#   region        = var.region
-#   network       = google_compute_network.virtual_private_cloud.id
-#   ip_cidr_range = var.subnet2_ip_range
-#   # private_ip_google_access = true
-# }
-
-resource "google_compute_global_address" "global-private-access-ip" {
-  name          = "global-private-access-ip"
-  purpose       = "VPC_PEERING"
-  address_type  = "INTERNAL"
-  prefix_length = 16
+  name          = var.subnet_1_name
+  description   = "first subnet webapp"
+  region        = var.region
   network       = google_compute_network.virtual_private_cloud.id
-}
-resource "google_service_networking_connection" "default" {
-  network                 = google_compute_network.virtual_private_cloud.id
-  service                 = "servicenetworking.googleapis.com"
-  reserved_peering_ranges = [google_compute_global_address.global-private-access-ip.name]
+  ip_cidr_range = var.subnet1_ip_range
+  depends_on    = [google_sql_database_instance.postgres_db_instance]
 }
 
-# resource "google_compute_global_address" "default" {
-#   name = "global-private-access-ip"
-#   address_type = "INTERNAL"
-#   purpose      = "PRIVATE_SERVICE_CONNECT"
-#   network      = google_compute_network.virtual_private_cloud.id
-#   address      = "10.3.0.5"
-
-# } 
-# resource "google_compute_global_forwarding_rule" "default" {
-#   name                  = "globalrule"
-#   target                = "all-apis"
-#   network               = google_compute_network.virtual_private_cloud.id
-#   ip_address            = google_compute_global_address.default.id
-#   load_balancing_scheme = ""
-# }
 resource "google_compute_route" "route_resource" {
   name             = var.route_1_name
   network          = google_compute_network.virtual_private_cloud.id
@@ -88,10 +50,74 @@ resource "google_compute_firewall" "deny_traffic_to_ssh_rule" {
   source_ranges = [var.firewall_source_ranges]
 }
 
+
+resource "google_compute_firewall" "allow_traffic_to_dbinstance_rule" {
+  name               = var.firewall_Rule_3
+  network            = google_compute_network.virtual_private_cloud.name
+  direction          = "EGRESS"
+  destination_ranges = [google_sql_database_instance.postgres_db_instance.private_ip_address]
+  allow {
+    protocol = var.firewall_3_protocol
+    ports    = [var.firewall_3_port]
+  }
+  priority    = 1001
+  target_tags = ["web-instance"]
+}
+
+resource "google_compute_firewall" "deny_traffic_to_dbinstance_rule" {
+  name               = var.firewall_Rule_4
+  network            = google_compute_network.virtual_private_cloud.name
+  direction          = "EGRESS"
+  destination_ranges = [google_sql_database_instance.postgres_db_instance.private_ip_address]
+
+  deny {
+    protocol = var.firewall_4_protocol
+    ports    = [var.firewall_4_port]
+  }
+  priority = 1002
+
+}
+
+resource "google_compute_global_address" "global-private-access-ip" {
+  name          = var.google_compute_global_address_name
+  purpose       = var.google_compute_global_address_purpose
+  address_type  = var.google_compute_global_address_type
+  prefix_length = var.google_compute_global_address_prefix_length
+  network       = google_compute_network.virtual_private_cloud.id
+}
+resource "google_service_networking_connection" "default" {
+  network                 = google_compute_network.virtual_private_cloud.id
+  service                 = var.google_service_networking_connection_service
+  reserved_peering_ranges = [google_compute_global_address.global-private-access-ip.name]
+  deletion_policy         = var.deletion_policy
+}
+
+
+
 resource "google_compute_instance" "web_instance" {
   name         = var.google_compute_instance_name
   machine_type = var.google_compute_instance_machine_type
 
+
+  metadata_startup_script = <<-EOT
+#!/bin/bash
+
+cd /home/Cloud/webapp/ || exit
+
+env_values=$(cat <<EOF
+PORT=${var.port}
+DB_NAME=${var.db_name}
+DB_USER=${var.db_user}
+DB_PASSWORD=${random_password.user_password.result}
+HOST=${google_sql_database_instance.postgres_db_instance.private_ip_address}
+DIALECT=${var.dialect}
+EOF
+)
+echo "$env_values" | sudo tee .env >/dev/null
+sudo chown csye6225:csye6225 .env 
+echo ".env file created"
+
+EOT
   boot_disk {
     initialize_params {
       image = var.machine_image_name
@@ -112,44 +138,46 @@ resource "google_compute_instance" "web_instance" {
     google_compute_firewall.allow_traffic_to_port_rule,
     google_compute_firewall.deny_traffic_to_ssh_rule
   ]
-
+  tags = ["web-instance"]
 }
 
 
 resource "google_sql_database_instance" "postgres_db_instance" {
-  name = "postgres-db-instance"
-  region = var.region
-  database_version = "POSTGRES_15"
+  name                = var.database_instance_name
+  region              = var.region
+  database_version    = var.database_version
   deletion_protection = false
-  
-  depends_on = [ google_service_networking_connection.default ]
+
+  depends_on = [google_service_networking_connection.default]
 
   settings {
-    tier = "db-f1-micro"
+    tier = var.database_instance_tier
     ip_configuration {
-      ipv4_enabled = false
-      private_network = google_compute_network.virtual_private_cloud.id
+      ipv4_enabled                                  = false
+      private_network                               = google_compute_network.virtual_private_cloud.id
       enable_private_path_for_google_cloud_services = true
     }
-    availability_type = "REGIONAL"
-    disk_type = "pd-ssd"
-    disk_size = 100
+    availability_type = var.database_instance_availability_type
+    disk_type         = var.database_instance_disk_type
+    disk_size         = var.disk_size
   }
 }
 
 resource "google_sql_database" "postgres_db" {
-  name = "webapp"
-  instance = google_sql_database_instance.postgres_db_instance.name
-  # deletion_policy = "ABANDON"
-  depends_on = [ google_sql_database_instance.postgres_db_instance ]
+  name            = var.database_name
+  instance        = google_sql_database_instance.postgres_db_instance.name
+  deletion_policy = var.deletion_policy
+  depends_on      = [google_sql_database_instance.postgres_db_instance]
 }
 
-resource "random_password" "user_password" {
-  length = 16
-  special = false
-}
 resource "google_sql_user" "db_user" {
-  name = "webapp"
-  instance = google_sql_database_instance.postgres_db_instance.name
-  password = random_password.user_password.result
+  name            = var.database_user
+  instance        = google_sql_database_instance.postgres_db_instance.name
+  deletion_policy = var.deletion_policy
+  password        = random_password.user_password.result
+  depends_on      = [google_sql_database.postgres_db]
+}
+resource "random_password" "user_password" {
+  length  = 16
+  special = false
 }
