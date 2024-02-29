@@ -130,3 +130,99 @@ variable "network_interface_network_tier" {
   type        = string
   description = "Tier to be configured for network of network interface"
 }
+
+variable "db_name" {
+  type = string
+}
+
+variable "db_user" {
+  type = string
+}
+
+variable "db_password" {
+  type = string
+}
+variable "port" {
+  type = number
+}
+
+variable "dialect" {
+  type = string
+}
+
+variable "google_compute_global_address_name" {
+  type = string
+}
+
+variable "google_compute_global_address_type" {
+  type = string
+}
+
+variable "google_compute_global_address_purpose" {
+  type = string
+}
+
+variable "google_compute_global_address_prefix_length" {
+  type = number
+}
+
+variable "google_service_networking_connection_service" {
+  type = string
+}
+
+variable "deletion_policy" {
+  type = string
+}
+
+variable "database_instance_name" {
+  type = string
+}
+
+variable "database_name" {
+  type = string
+
+}
+
+variable "database_user" {
+  type = string
+}
+
+variable "database_version" {
+  type = string
+}
+
+variable "database_instance_availability_type" {
+  type = string
+}
+
+variable "database_instance_tier" {
+  type = string
+}
+
+variable "database_instance_disk_type" {
+  type = string
+}
+
+variable "firewall_Rule_3" {
+  type = string
+}
+
+variable "firewall_Rule_4" {
+  type = string
+}
+
+variable "firewall_3_protocol" {
+  type = string
+}
+
+variable "firewall_4_protocol" {
+  type = string
+}
+
+variable "firewall_3_port" {
+  type = string
+}
+
+variable "firewall_4_port" {
+  type = string
+}
