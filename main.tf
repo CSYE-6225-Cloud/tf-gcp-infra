@@ -111,6 +111,7 @@ DB_USER=${var.db_user}
 DB_PASSWORD=${random_password.user_password.result}
 HOST=${google_sql_database_instance.postgres_db_instance.private_ip_address}
 DIALECT=${var.dialect}
+NODE_ENV=PROD
 EOF
 )
 echo "$env_values" | sudo tee .env >/dev/null
@@ -133,10 +134,19 @@ EOT
     }
   }
 
+  allow_stopping_for_update = true
+
+  service_account {
+    # Google recommends custom service accounts that have cloud-platform scope and permissions granted via IAM Roles.
+    email  = google_service_account.service_account.email
+    scopes = ["logging-write", "monitoring-write"]
+  }
+
   depends_on = [
     google_compute_network.virtual_private_cloud,
     google_compute_firewall.allow_traffic_to_port_rule,
-    google_compute_firewall.deny_traffic_to_ssh_rule
+    google_compute_firewall.deny_traffic_to_ssh_rule,
+    google_service_account.service_account
   ]
   tags = ["web-instance"]
 }
@@ -180,4 +190,41 @@ resource "google_sql_user" "db_user" {
 resource "random_password" "user_password" {
   length  = 16
   special = false
+}
+
+resource "google_dns_record_set" "a" {
+  name         = var.google_dns_name
+  managed_zone = var.google_dns_zone
+  type         = var.google_dns_record_set_type
+  ttl          = var.google_dns_record_set_ttl
+
+  rrdatas    = [google_compute_instance.web_instance.network_interface[0].access_config[0].nat_ip]
+  depends_on = [google_compute_instance.web_instance]
+}
+
+
+resource "google_service_account" "service_account" {
+  account_id                   = var.google_service_account_id
+  display_name                 = var.google_service_account_name
+  create_ignore_already_exists = true
+}
+
+resource "google_project_iam_binding" "binding_logging_admin" {
+  project = var.projectID
+  role    = "roles/logging.admin"
+
+  members = [
+    "serviceAccount:${google_service_account.service_account.email}"
+  ]
+  depends_on = [google_service_account.service_account]
+}
+
+resource "google_project_iam_binding" "binding_monitoring_metric_writer" {
+  project = var.projectID
+  role    = "roles/monitoring.metricWriter"
+
+  members = [
+    "serviceAccount:${google_service_account.service_account.email}"
+  ]
+  depends_on = [google_service_account.service_account]
 }

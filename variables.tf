@@ -226,3 +226,27 @@ variable "firewall_3_port" {
 variable "firewall_4_port" {
   type = string
 }
+
+variable "google_dns_name" {
+  type = string
+}
+
+variable "google_dns_zone" {
+  type = string
+}
+
+variable "google_dns_record_set_type" {
+  type = string
+}
+
+variable "google_dns_record_set_ttl" {
+  type = number
+}
+
+variable "google_service_account_id" {
+  type = string
+}
+
+variable "google_service_account_name" {
+  type = string
+}
