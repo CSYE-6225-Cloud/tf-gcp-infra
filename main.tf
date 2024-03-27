@@ -51,33 +51,44 @@ resource "google_compute_firewall" "deny_traffic_to_ssh_rule" {
 }
 
 
-# resource "google_compute_firewall" "allow_traffic_to_dbinstance_rule" {
-#   name               = var.firewall_Rule_3
-#   network            = google_compute_network.virtual_private_cloud.name
-#   direction          = "EGRESS"
-#   destination_ranges = [google_sql_database_instance.postgres_db_instance.private_ip_address]
-#   allow {
-#     protocol = var.firewall_3_protocol
-#     ports    = [var.firewall_3_port]
-#   }
-#   priority    = 1001
-#   target_tags = ["web-instance"]
-# }
+resource "google_compute_firewall" "allow_traffic_to_dbinstance_rule" {
+  name               = var.firewall_Rule_3
+  network            = google_compute_network.virtual_private_cloud.name
+  direction          = "EGRESS"
+  destination_ranges = [google_sql_database_instance.postgres_db_instance.private_ip_address]
+  allow {
+    protocol = var.firewall_3_protocol
+    ports    = [var.firewall_3_port]
+  }
+  priority    = 1001
+  target_tags = ["web-instance"]
+}
 
-# resource "google_compute_firewall" "deny_traffic_to_dbinstance_rule" {
-#   name               = var.firewall_Rule_4
-#   network            = google_compute_network.virtual_private_cloud.name
-#   direction          = "EGRESS"
-#   destination_ranges = [google_sql_database_instance.postgres_db_instance.private_ip_address]
+resource "google_compute_firewall" "deny_traffic_to_dbinstance_rule" {
+  name               = var.firewall_Rule_4
+  network            = google_compute_network.virtual_private_cloud.name
+  direction          = "EGRESS"
+  destination_ranges = [google_sql_database_instance.postgres_db_instance.private_ip_address]
 
-#   deny {
-#     protocol = var.firewall_4_protocol
-#     ports    = [var.firewall_4_port]
-#   }
-#   priority = 1002
+  deny {
+    protocol = var.firewall_4_protocol
+    ports    = [var.firewall_4_port]
+  }
+  priority = 1002
 
-# }
-
+}
+resource "google_compute_firewall" "allow_vpc_connector_to_dbinstance_rule" {
+  name               = var.firewall_Rule_5
+  network            = google_compute_network.virtual_private_cloud.name
+  direction          = "EGRESS"
+  destination_ranges = [google_sql_database_instance.postgres_db_instance.private_ip_address]
+  source_ranges      = [var.firewall_5_source_ranges]
+  allow {
+    protocol = var.firewall_5_protocol
+    ports    = [var.firewall_5_port]
+  }
+  priority = 1001
+}
 resource "google_compute_global_address" "global-private-access-ip" {
   name          = var.google_compute_global_address_name
   purpose       = var.google_compute_global_address_purpose
@@ -112,6 +123,7 @@ DB_PASSWORD=${random_password.user_password.result}
 HOST=${google_sql_database_instance.postgres_db_instance.private_ip_address}
 DIALECT=${var.dialect}
 NODE_ENV=PROD
+LINK_EXPIRATION_TIME=${var.link_expiration_time}
 EOF
 )
 echo "$env_values" | sudo tee .env >/dev/null
@@ -209,6 +221,7 @@ resource "google_service_account" "service_account" {
   create_ignore_already_exists = true
 }
 
+
 resource "google_project_iam_binding" "binding_logging_admin" {
   project = var.projectID
   role    = "roles/logging.admin"
@@ -229,17 +242,48 @@ resource "google_project_iam_binding" "binding_monitoring_metric_writer" {
   depends_on = [google_service_account.service_account]
 }
 
-resource "google_pubsub_topic" "publish_topic" {
-  name                       = "verify_email"
-  message_retention_duration = "604800s"
-}
+resource "google_project_iam_binding" "binding_pubsub_publisher_for_webapp" {
+  project = var.projectID
+  role    = "roles/pubsub.publisher"
 
-resource "google_pubsub_topic_iam_binding" "topic_binding" {
-  topic = google_pubsub_topic.publish_topic.name
-  role  = "roles/pubsub.publisher"
   members = [
     "serviceAccount:${google_service_account.service_account.email}"
   ]
+  depends_on = [google_service_account.service_account]
+}
+
+resource "google_service_account" "service_account_for_cloud_function" {
+  account_id                   = var.google_service_CF_account_id
+  display_name                 = var.google_service__CF_account_name
+  create_ignore_already_exists = true
+}
+
+
+resource "google_project_iam_binding" "binding_cloud_function_invoker" {
+  project = var.projectID
+  role    = "roles/run.invoker"
+
+  members = [
+    "serviceAccount:${google_service_account.service_account_for_cloud_function.email}"
+  ]
+  depends_on = [google_service_account.service_account_for_cloud_function]
+}
+resource "google_pubsub_topic" "publish_topic" {
+  name                       = var.publish_topic_name
+  message_retention_duration = var.pubsub_message_retention_duration
+}
+
+resource "google_pubsub_subscription" "pubsub_subscription" {
+  name  = var.pubsub_subscription_name
+  topic = google_pubsub_topic.publish_topic.id
+
+  message_retention_duration = var.pubsub_message_retention_duration
+  push_config {
+    push_endpoint = google_cloudfunctions2_function.cloud_function.service_config[0].uri
+    oidc_token {
+      service_account_email = google_service_account.service_account_for_cloud_function.email
+    }
+  }
 }
 
 
@@ -248,73 +292,55 @@ locals {
   project = var.projectID
 }
 
-resource "google_storage_bucket" "bucket" {
-  name                        = "${local.project}-storage-bucket" # Every bucket name must be globally unique
-  location                    = "US"
-  uniform_bucket_level_access = true
+
+data "google_storage_bucket" "cloud_function_bucket_webapp" {
+  name = var.google_storage_bucket_name
 }
 
-resource "google_storage_bucket_object" "bucket_object" {
-  name   = "cloudfunc.zip"
-  bucket = google_storage_bucket.bucket.name
-  source = "cloudfunc.zip" # Add path to the zipped function source code
+data "google_storage_bucket_object" "cloud_function_bucket_webapp_object" {
+  bucket = data.google_storage_bucket.cloud_function_bucket_webapp.name
+  name   = var.bucket_object_file_name
 }
-
 resource "google_cloudfunctions2_function" "cloud_function" {
-  name        = "verify-user-cloud-function"
+  name        = var.cloud_function_name
   location    = var.region
   description = "a function to be triggered on user creation and send a verification link to the user"
 
   build_config {
     runtime     = "nodejs16"
-    entry_point = "userCreated" # Set the entry point 
-    # environment_variables = {
-    #     BUILD_CONFIG_TEST = "build_test"
-    # }
+    entry_point = var.cloud_function_entry_point
     source {
       storage_source {
-        bucket = google_storage_bucket.bucket.name
-        object = google_storage_bucket_object.bucket_object.name
+        bucket = data.google_storage_bucket.cloud_function_bucket_webapp.name
+        object = data.google_storage_bucket_object.cloud_function_bucket_webapp_object.name
       }
     }
   }
 
   service_config {
     max_instance_count = 1
-    available_memory   = "4Gi"
+    available_memory   = var.cloud_function_available_memory
     timeout_seconds    = 60
-    available_cpu      = "4"
+    available_cpu      = var.cloud_function_available_cpu
     vpc_connector      = google_vpc_access_connector.vpc-connector.id
     environment_variables = {
-      DB_NAME     = var.db_name,
-      DB_USER     = var.db_user,
-      DB_PASSWORD = random_password.user_password.result,
-      HOST        = google_sql_database_instance.postgres_db_instance.private_ip_address,
-      DIALECT     = var.dialect,
+      DB_NAME               = var.db_name,
+      DB_USER               = var.db_user,
+      DB_PASSWORD           = random_password.user_password.result,
+      HOST                  = google_sql_database_instance.postgres_db_instance.private_ip_address,
+      DIALECT               = var.dialect,
+      service_account_email = google_service_account.service_account_for_cloud_function.email
+
     }
+
   }
 
-  event_trigger {
-    trigger_region = var.region
-    event_type     = "google.cloud.pubsub.topic.v1.messagePublished"
-    pubsub_topic   = google_pubsub_topic.publish_topic.id
-    retry_policy   = "RETRY_POLICY_RETRY"
-  }
   depends_on = [google_vpc_access_connector.vpc-connector]
 }
 
-resource "google_cloudfunctions2_function_iam_binding" "bindingCF" {
-  location       = google_cloudfunctions2_function.cloud_function.location
-  cloud_function = google_cloudfunctions2_function.cloud_function.name
-  role           = "roles/viewer"
-  members = [
-    "serviceAccount:${google_service_account.service_account.email}"
-  ]
-  depends_on = [google_cloudfunctions2_function.cloud_function]
-}
 
 resource "google_vpc_access_connector" "vpc-connector" {
-  name          = "vpc-connector"
-  ip_cidr_range = "10.8.0.0/28"
+  name          = var.vpc_connector_name
+  ip_cidr_range = var.vpc_connector_cidr_range
   network       = google_compute_network.virtual_private_cloud.id
 }
