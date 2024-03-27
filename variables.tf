@@ -150,6 +150,10 @@ variable "dialect" {
   type = string
 }
 
+variable "link_expiration_time" {
+  type = number
+}
+
 variable "google_compute_global_address_name" {
   type = string
 }
@@ -211,6 +215,10 @@ variable "firewall_Rule_4" {
   type = string
 }
 
+variable "firewall_Rule_5" {
+  type = string
+}
+
 variable "firewall_3_protocol" {
   type = string
 }
@@ -219,6 +227,9 @@ variable "firewall_4_protocol" {
   type = string
 }
 
+variable "firewall_5_protocol" {
+  type = string
+}
 variable "firewall_3_port" {
   type = string
 }
@@ -227,6 +238,13 @@ variable "firewall_4_port" {
   type = string
 }
 
+variable "firewall_5_port" {
+  type = string
+}
+
+variable "firewall_5_source_ranges" {
+  type = string
+}
 variable "google_dns_name" {
   type = string
 }
@@ -248,5 +266,54 @@ variable "google_service_account_id" {
 }
 
 variable "google_service_account_name" {
+  type = string
+}
+
+variable "google_service_CF_account_id" {
+  type = string
+}
+
+variable "google_service__CF_account_name" {
+  type = string
+}
+
+variable "publish_topic_name" {
+  type = string
+}
+
+variable "pubsub_message_retention_duration" {
+  type = string
+}
+
+variable "pubsub_subscription_name" {
+  type = string
+}
+
+variable "google_storage_bucket_name" {
+  type = string
+}
+variable "bucket_object_file_name" {
+  type = string
+}
+variable "cloud_function_name" {
+  type = string
+}
+
+variable "cloud_function_entry_point" {
+  type = string
+}
+
+variable "cloud_function_available_memory" {
+  type = string
+}
+
+variable "cloud_function_available_cpu" {
+  type = string
+}
+variable "vpc_connector_name" {
+  type = string
+}
+
+variable "vpc_connector_cidr_range" {
   type = string
 }
