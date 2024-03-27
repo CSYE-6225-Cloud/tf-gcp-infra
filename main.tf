@@ -43,7 +43,7 @@ resource "google_compute_firewall" "allow_traffic_to_port_rule" {
 resource "google_compute_firewall" "deny_traffic_to_ssh_rule" {
   name    = var.firewall_Rule_2
   network = google_compute_network.virtual_private_cloud.name
-  allow {
+  deny {
     protocol = var.firewall_2_protocol
     ports    = [var.firewall_2_port]
   }
@@ -284,6 +284,7 @@ resource "google_pubsub_subscription" "pubsub_subscription" {
       service_account_email = google_service_account.service_account_for_cloud_function.email
     }
   }
+  depends_on = [ google_pubsub_topic.publish_topic, google_cloudfunctions2_function.cloud_function, google_service_account.service_account_for_cloud_function ]
 }
 
 
@@ -300,6 +301,7 @@ data "google_storage_bucket" "cloud_function_bucket_webapp" {
 data "google_storage_bucket_object" "cloud_function_bucket_webapp_object" {
   bucket = data.google_storage_bucket.cloud_function_bucket_webapp.name
   name   = var.bucket_object_file_name
+  depends_on = [ data.google_storage_bucket.cloud_function_bucket_webapp ]
 }
 resource "google_cloudfunctions2_function" "cloud_function" {
   name        = var.cloud_function_name
@@ -335,7 +337,7 @@ resource "google_cloudfunctions2_function" "cloud_function" {
 
   }
 
-  depends_on = [google_vpc_access_connector.vpc-connector]
+  depends_on = [google_vpc_access_connector.vpc-connector, google_service_account.service_account_for_cloud_function, google_sql_database_instance.postgres_db_instance, data.google_storage_bucket_object.cloud_function_bucket_webapp_object]
 }
 
 
@@ -343,4 +345,5 @@ resource "google_vpc_access_connector" "vpc-connector" {
   name          = var.vpc_connector_name
   ip_cidr_range = var.vpc_connector_cidr_range
   network       = google_compute_network.virtual_private_cloud.id
+  depends_on = [ google_compute_network.virtual_private_cloud ]
 }
