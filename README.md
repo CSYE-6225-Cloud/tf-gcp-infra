@@ -1,6 +1,6 @@
-CSYE-6225-Assignment-3
+# CSYE-6225-Assignment-7
 
-Steps to setup Google Cloud Platfrom (GCP) :
+# Steps to setup Google Cloud Platfrom (GCP) :
 
 1. Setup a billing account
 2. Install google cloud CLI and set the path of it in home directory's bin
@@ -16,7 +16,7 @@ Steps to setup Google Cloud Platfrom (GCP) :
    command : gcloud compute project-info add-metadata \
    --metadata google-compute-default-region=us-east4,google-compute-default-zone=us-east4-c
 
-Steps to setup infrastructure using terrafrom :
+# Steps to setup infrastructure using terrafrom :
 
 1. Mention provider - Google
 2. Create VPC using google_compute_network. Make auto_create_subnetworks as false to not create subnetworks automatically and delete_default_routes_on_create as true to delete default routes which are created on terraform apply
@@ -43,7 +43,21 @@ NAME TITLE
 2. oslogin.googleapis.com Cloud OS Login API
 
 
-Adding 2 Firewall rules:
+# Added Firewall rules:
 1. To allow traffic from the internet to the webapp application port 3001. 
 2. To not allow traffic to SSH port (22) from the internet.
+3. Added firewall rule to allow vpc connector to the database instance 
 
+# Project Progression: 
+
+1. Created a VPC
+2. Created a subnet inside the vpc for webapp instance
+3. Created a google compute instance for the webapp
+4. Created a database instance inside GCP's VPC and created database, user, password in it
+5. Connected webapp instance with this database
+6. Added a new service account for roles related to cloud function. Total there are 2 service accounts 
+   a. Service account for webapp - roles: logging, monitoring and pubsub
+   b. Service account for cloud function - roles: run.invoke 
+7. Added pubsub subscriber which would push the topic messages to the cloud function
+8. Removed storage bucket and object as they would be added manually and added data instead
+9. Added appropriate cloud service account to the function
