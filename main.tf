@@ -105,10 +105,75 @@ resource "google_service_networking_connection" "default" {
 
 
 
-resource "google_compute_instance" "web_instance" {
-  name         = var.google_compute_instance_name
-  machine_type = var.google_compute_instance_machine_type
+# resource "google_compute_instance" "web_instance" {
+#   name         = var.google_compute_instance_name
+#   machine_type = var.google_compute_instance_machine_type
 
+
+#   metadata_startup_script = <<-EOT
+# #!/bin/bash
+
+# cd /home/Cloud/webapp/ || exit
+
+# env_values=$(cat <<EOF
+# PORT=${var.port}
+# DB_NAME=${var.db_name}
+# DB_USER=${var.db_user}
+# DB_PASSWORD=${random_password.user_password.result}
+# HOST=${google_sql_database_instance.postgres_db_instance.private_ip_address}
+# DIALECT=${var.dialect}
+# NODE_ENV=PROD
+# LINK_EXPIRATION_TIME=${var.link_expiration_time}
+# EOF
+# )
+# echo "$env_values" | sudo tee .env >/dev/null
+# sudo chown csye6225:csye6225 .env 
+# echo ".env file created"
+
+# EOT
+#   boot_disk {
+#     initialize_params {
+#       image = var.machine_image_name
+#       size  = var.disk_size
+#       type  = var.disk_type
+#     }
+#   }
+#   network_interface {
+#     network    = google_compute_network.virtual_private_cloud.id
+#     subnetwork = google_compute_subnetwork.subnet_1.id
+#     access_config {
+#       network_tier = var.network_interface_network_tier
+#     }
+#   }
+
+#   allow_stopping_for_update = true
+
+#   service_account {
+#     # Google recommends custom service accounts that have cloud-platform scope and permissions granted via IAM Roles.
+#     email  = google_service_account.service_account.email
+#     scopes = ["logging-write", "monitoring-write", "pubsub"]
+#   }
+
+#   depends_on = [
+#     google_compute_network.virtual_private_cloud,
+#     google_compute_firewall.allow_traffic_to_port_rule,
+#     google_compute_firewall.deny_traffic_to_ssh_rule,
+#     google_service_account.service_account
+#   ]
+#   tags = ["web-instance"]
+# }
+
+
+resource "google_compute_region_instance_template" "web_instance_template" {
+  name        = "web-instance-template"
+  description = "This template is used to create web instances depending on the load"
+
+  machine_type   = var.google_compute_instance_machine_type
+  can_ip_forward = false
+
+  scheduling {
+    automatic_restart = true
+  }
 
   metadata_startup_script = <<-EOT
 #!/bin/bash
@@ -131,13 +196,14 @@ sudo chown csye6225:csye6225 .env
 echo ".env file created"
 
 EOT
-  boot_disk {
-    initialize_params {
-      image = var.machine_image_name
-      size  = var.disk_size
-      type  = var.disk_type
-    }
+  // Create a new boot disk from an image
+  disk {
+    source_image = var.machine_image_name
+    auto_delete  = true
+    boot         = true
+    type         = var.disk_type
   }
+
   network_interface {
     network    = google_compute_network.virtual_private_cloud.id
     subnetwork = google_compute_subnetwork.subnet_1.id
@@ -146,12 +212,13 @@ EOT
     }
   }
 
-  allow_stopping_for_update = true
-
   service_account {
-    # Google recommends custom service accounts that have cloud-platform scope and permissions granted via IAM Roles.
     email  = google_service_account.service_account.email
     scopes = ["logging-write", "monitoring-write", "pubsub"]
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 
   depends_on = [
@@ -160,10 +227,107 @@ EOT
     google_compute_firewall.deny_traffic_to_ssh_rule,
     google_service_account.service_account
   ]
+
   tags = ["web-instance"]
 }
 
+resource "google_compute_health_check" "http_health_check" {
+  name        = "http-health-check"
+  description = "Health check via http"
 
+
+  timeout_sec         = 5
+  check_interval_sec  = 5
+  healthy_threshold   = 3
+  unhealthy_threshold = 4
+
+  http_health_check {
+    port         = var.port
+    request_path = "/healthz"
+    proxy_header = "NONE"
+  }
+}
+resource "google_compute_region_instance_group_manager" "webapp_instance_group_manager" {
+  name = "webapp-instance-group-manager"
+
+  base_instance_name        = "webapp-base-instance"
+  region                    = var.region
+  distribution_policy_zones = [var.zone]
+
+  version {
+    instance_template = google_compute_region_instance_template.web_instance_template.self_link
+  }
+
+  auto_healing_policies {
+    health_check      = google_compute_health_check.http_health_check.id
+    initial_delay_sec = 300
+  }
+  named_port {
+    name = "http"
+    port = 3001
+  }
+  depends_on = [google_compute_health_check.http_health_check]
+}
+
+resource "google_compute_region_autoscaler" "webapp_instance_region_autoscaler" {
+  name   = "webapp-instance-region-autoscaler"
+  region = var.region
+  target = google_compute_region_instance_group_manager.webapp_instance_group_manager.id
+
+  autoscaling_policy {
+    max_replicas    = 5
+    min_replicas    = 1
+    cooldown_period = 60
+
+    cpu_utilization {
+      target = 0.05
+    }
+  }
+  depends_on = [google_compute_region_instance_group_manager.webapp_instance_group_manager]
+}
+
+module "loadbalancer" {
+  source  = "terraform-google-modules/lb-http/google"
+  version = "~> 10.0"
+  name    = "loadbalancer"
+  project = var.projectID
+
+  # firewall_networks = [google_compute_network.default.name]
+  ssl                             = true
+  managed_ssl_certificate_domains = ["payalkhatri.me"]
+  # https_redirect                  = true
+  # labels                          = { "example-label" = "cloud-run-example" }
+  backends = {
+    default = {
+
+      protocol    = "HTTP"
+      port        = 3001
+      port_name   = "http"
+      timeout_sec = 10
+      enable_cdn  = false
+
+      health_check = {
+        request_path = "/healthz"
+        port         = 3001
+      }
+
+      log_config = {
+        enable      = true
+        sample_rate = 1.0
+      }
+
+      groups = [
+        {
+          group = google_compute_region_instance_group_manager.webapp_instance_group_manager.instance_group
+        },
+      ]
+
+      iap_config = {
+        enable = false
+      }
+    }
+  }
+}
 resource "google_sql_database_instance" "postgres_db_instance" {
   name                = var.database_instance_name
   region              = var.region
@@ -210,8 +374,10 @@ resource "google_dns_record_set" "a" {
   type         = var.google_dns_record_set_type
   ttl          = var.google_dns_record_set_ttl
 
-  rrdatas    = [google_compute_instance.web_instance.network_interface[0].access_config[0].nat_ip]
-  depends_on = [google_compute_instance.web_instance]
+  //rrdatas    = [google_compute_instance.web_instance.network_interface[0].access_config[0].nat_ip]
+  rrdatas = [module.loadbalancer.external_ip]
+  //depends_on = [google_compute_instance.web_instance]
+
 }
 
 
@@ -284,7 +450,7 @@ resource "google_pubsub_subscription" "pubsub_subscription" {
       service_account_email = google_service_account.service_account_for_cloud_function.email
     }
   }
-  depends_on = [ google_pubsub_topic.publish_topic, google_cloudfunctions2_function.cloud_function, google_service_account.service_account_for_cloud_function ]
+  depends_on = [google_pubsub_topic.publish_topic, google_cloudfunctions2_function.cloud_function, google_service_account.service_account_for_cloud_function]
 }
 
 
@@ -299,9 +465,9 @@ data "google_storage_bucket" "cloud_function_bucket_webapp" {
 }
 
 data "google_storage_bucket_object" "cloud_function_bucket_webapp_object" {
-  bucket = data.google_storage_bucket.cloud_function_bucket_webapp.name
-  name   = var.bucket_object_file_name
-  depends_on = [ data.google_storage_bucket.cloud_function_bucket_webapp ]
+  bucket     = data.google_storage_bucket.cloud_function_bucket_webapp.name
+  name       = var.bucket_object_file_name
+  depends_on = [data.google_storage_bucket.cloud_function_bucket_webapp]
 }
 resource "google_cloudfunctions2_function" "cloud_function" {
   name        = var.cloud_function_name
@@ -345,5 +511,5 @@ resource "google_vpc_access_connector" "vpc-connector" {
   name          = var.vpc_connector_name
   ip_cidr_range = var.vpc_connector_cidr_range
   network       = google_compute_network.virtual_private_cloud.id
-  depends_on = [ google_compute_network.virtual_private_cloud ]
+  depends_on    = [google_compute_network.virtual_private_cloud]
 }
