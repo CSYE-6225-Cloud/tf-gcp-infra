@@ -154,6 +154,13 @@ variable "link_expiration_time" {
   type = number
 }
 
+variable "mailgun_domain" {
+  type = string
+}
+
+variable "mailgun_apikey" {
+  type = string
+}
 variable "google_compute_global_address_name" {
   type = string
 }
@@ -317,3 +324,71 @@ variable "vpc_connector_name" {
 variable "vpc_connector_cidr_range" {
   type = string
 }
+
+variable "region_instance_template_name" {
+  type = string
+}
+
+variable "http_health_check_name" {
+  type = string
+}
+
+variable "http_health_check_timeout_sec" {
+  type = number
+}
+
+variable "http_health_check_check_interval_sec" {
+  type = number
+}
+
+variable "http_health_check_healthy_threshold" {
+  type = number
+}
+
+variable "http_health_check_unhealthy_threshold" {
+  type = number
+}
+
+variable "region_instance_group_manager_name" {
+  type = string
+}
+
+variable "region_instance_group_manager_base_instance_name" {
+  type = string
+}
+
+variable "named_port_name" {
+  type = string
+}
+
+variable "named_port" {
+  type = number
+}
+
+variable "region_autoscaler_name" {
+  type = string
+}
+variable "autoscaler_max_replicas" {
+  type = number
+}
+
+variable "autoscaler_min_replicas" {
+  type = number
+}
+
+variable "autoscaler_cpu_utilization" {
+  type = number
+}
+
+variable "module_name" {
+  type = string
+}
+
+variable "managed_ssl_certificate_domain" {
+  type = string
+}
+
+variable "health_check_path" {
+  type = string
+}
+
