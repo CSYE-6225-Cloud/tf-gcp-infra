@@ -30,16 +30,6 @@ resource "google_compute_route" "route_resource" {
 }
 
 
-resource "google_compute_firewall" "allow_traffic_to_port_rule" {
-  name    = var.firewall_Rule_1
-  network = google_compute_network.virtual_private_cloud.name
-  allow {
-    protocol = var.firewall_1_protocol
-    ports    = [var.firewall_1_port]
-  }
-  source_ranges = [var.firewall_source_ranges]
-}
-
 resource "google_compute_firewall" "deny_traffic_to_ssh_rule" {
   name    = var.firewall_Rule_2
   network = google_compute_network.virtual_private_cloud.name
@@ -104,68 +94,8 @@ resource "google_service_networking_connection" "default" {
 }
 
 
-
-# resource "google_compute_instance" "web_instance" {
-#   name         = var.google_compute_instance_name
-#   machine_type = var.google_compute_instance_machine_type
-
-
-#   metadata_startup_script = <<-EOT
-# #!/bin/bash
-
-# cd /home/Cloud/webapp/ || exit
-
-# env_values=$(cat <<EOF
-# PORT=${var.port}
-# DB_NAME=${var.db_name}
-# DB_USER=${var.db_user}
-# DB_PASSWORD=${random_password.user_password.result}
-# HOST=${google_sql_database_instance.postgres_db_instance.private_ip_address}
-# DIALECT=${var.dialect}
-# NODE_ENV=PROD
-# LINK_EXPIRATION_TIME=${var.link_expiration_time}
-# EOF
-# )
-# echo "$env_values" | sudo tee .env >/dev/null
-# sudo chown csye6225:csye6225 .env 
-# echo ".env file created"
-
-# EOT
-#   boot_disk {
-#     initialize_params {
-#       image = var.machine_image_name
-#       size  = var.disk_size
-#       type  = var.disk_type
-#     }
-#   }
-#   network_interface {
-#     network    = google_compute_network.virtual_private_cloud.id
-#     subnetwork = google_compute_subnetwork.subnet_1.id
-#     access_config {
-#       network_tier = var.network_interface_network_tier
-#     }
-#   }
-
-#   allow_stopping_for_update = true
-
-#   service_account {
-#     # Google recommends custom service accounts that have cloud-platform scope and permissions granted via IAM Roles.
-#     email  = google_service_account.service_account.email
-#     scopes = ["logging-write", "monitoring-write", "pubsub"]
-#   }
-
-#   depends_on = [
-#     google_compute_network.virtual_private_cloud,
-#     google_compute_firewall.allow_traffic_to_port_rule,
-#     google_compute_firewall.deny_traffic_to_ssh_rule,
-#     google_service_account.service_account
-#   ]
-#   tags = ["web-instance"]
-# }
-
-
 resource "google_compute_region_instance_template" "web_instance_template" {
-  name        = "web-instance-template"
+  name_prefix = var.region_instance_template_name
   description = "This template is used to create web instances depending on the load"
 
   machine_type   = var.google_compute_instance_machine_type
@@ -223,7 +153,6 @@ EOT
 
   depends_on = [
     google_compute_network.virtual_private_cloud,
-    google_compute_firewall.allow_traffic_to_port_rule,
     google_compute_firewall.deny_traffic_to_ssh_rule,
     google_service_account.service_account
   ]
@@ -232,25 +161,24 @@ EOT
 }
 
 resource "google_compute_health_check" "http_health_check" {
-  name        = "http-health-check"
+  name        = var.http_health_check_name
   description = "Health check via http"
 
 
-  timeout_sec         = 5
-  check_interval_sec  = 5
-  healthy_threshold   = 3
-  unhealthy_threshold = 4
+  timeout_sec         = var.http_health_check_timeout_sec
+  check_interval_sec  = var.http_health_check_check_interval_sec
+  healthy_threshold   = var.http_health_check_healthy_threshold
+  unhealthy_threshold = var.http_health_check_unhealthy_threshold
 
   http_health_check {
     port         = var.port
-    request_path = "/healthz"
+    request_path = var.health_check_path
     proxy_header = "NONE"
   }
 }
 resource "google_compute_region_instance_group_manager" "webapp_instance_group_manager" {
-  name = "webapp-instance-group-manager"
-
-  base_instance_name        = "webapp-base-instance"
+  name                      = var.region_instance_group_manager_name
+  base_instance_name        = var.region_instance_group_manager_base_instance_name
   region                    = var.region
   distribution_policy_zones = [var.zone]
 
@@ -263,52 +191,50 @@ resource "google_compute_region_instance_group_manager" "webapp_instance_group_m
     initial_delay_sec = 300
   }
   named_port {
-    name = "http"
-    port = 3001
+    name = var.named_port_name
+    port = var.named_port
   }
   depends_on = [google_compute_health_check.http_health_check]
 }
 
 resource "google_compute_region_autoscaler" "webapp_instance_region_autoscaler" {
-  name   = "webapp-instance-region-autoscaler"
+  name   = var.region_autoscaler_name
   region = var.region
   target = google_compute_region_instance_group_manager.webapp_instance_group_manager.id
 
   autoscaling_policy {
-    max_replicas    = 5
-    min_replicas    = 1
+    max_replicas    = var.autoscaler_max_replicas
+    min_replicas    = var.autoscaler_min_replicas
     cooldown_period = 60
 
     cpu_utilization {
-      target = 0.05
+      target = var.autoscaler_cpu_utilization
     }
   }
   depends_on = [google_compute_region_instance_group_manager.webapp_instance_group_manager]
 }
 
 module "loadbalancer" {
-  source  = "terraform-google-modules/lb-http/google"
-  version = "~> 10.0"
-  name    = "loadbalancer"
-  project = var.projectID
-
-  # firewall_networks = [google_compute_network.default.name]
+  source                          = "terraform-google-modules/lb-http/google"
+  version                         = "~> 10.0"
+  name                            = var.module_name
+  project                         = var.projectID
+  http_forward                    = false
+  firewall_networks               = [google_compute_network.virtual_private_cloud.name]
   ssl                             = true
-  managed_ssl_certificate_domains = ["payalkhatri.me"]
-  # https_redirect                  = true
-  # labels                          = { "example-label" = "cloud-run-example" }
+  managed_ssl_certificate_domains = [var.managed_ssl_certificate_domain]
   backends = {
     default = {
 
       protocol    = "HTTP"
-      port        = 3001
-      port_name   = "http"
+      port        = var.named_port
+      port_name   = var.named_port_name
       timeout_sec = 10
       enable_cdn  = false
 
       health_check = {
-        request_path = "/healthz"
-        port         = 3001
+        request_path = var.health_check_path
+        port         = var.port
       }
 
       log_config = {
@@ -327,6 +253,7 @@ module "loadbalancer" {
       }
     }
   }
+  target_tags = ["web-instance"]
 }
 resource "google_sql_database_instance" "postgres_db_instance" {
   name                = var.database_instance_name
@@ -373,11 +300,7 @@ resource "google_dns_record_set" "a" {
   managed_zone = var.google_dns_zone
   type         = var.google_dns_record_set_type
   ttl          = var.google_dns_record_set_ttl
-
-  //rrdatas    = [google_compute_instance.web_instance.network_interface[0].access_config[0].nat_ip]
-  rrdatas = [module.loadbalancer.external_ip]
-  //depends_on = [google_compute_instance.web_instance]
-
+  rrdatas      = [module.loadbalancer.external_ip]
 }
 
 
@@ -497,6 +420,8 @@ resource "google_cloudfunctions2_function" "cloud_function" {
       DB_PASSWORD           = random_password.user_password.result,
       HOST                  = google_sql_database_instance.postgres_db_instance.private_ip_address,
       DIALECT               = var.dialect,
+      MAILGUN_DOMAIN        = var.mailgun_domain,
+      MAILGUN_APIKEY        = var.mailgun_apikey,
       service_account_email = google_service_account.service_account_for_cloud_function.email
 
     }
