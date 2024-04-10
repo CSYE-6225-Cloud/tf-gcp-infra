@@ -391,4 +391,3 @@ variable "managed_ssl_certificate_domain" {
 variable "health_check_path" {
   type = string
 }
-
