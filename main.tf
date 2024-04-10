@@ -4,6 +4,18 @@ provider "google" {
   zone    = var.zone
 }
 
+provider "google-beta" {
+  project = var.projectID
+  region  = var.region
+  zone    = var.zone
+}
+terraform {
+  required_providers {
+    google = {
+      version = "~> 5.23.0"
+    }
+  }
+}
 resource "google_compute_network" "virtual_private_cloud" {
   name                            = var.vpc_name
   description                     = "Creating a vpc"
@@ -33,7 +45,7 @@ resource "google_compute_route" "route_resource" {
 resource "google_compute_firewall" "deny_traffic_to_ssh_rule" {
   name    = var.firewall_Rule_2
   network = google_compute_network.virtual_private_cloud.name
-  deny {
+  allow {
     protocol = var.firewall_2_protocol
     ports    = [var.firewall_2_port]
   }
@@ -132,7 +144,12 @@ EOT
     auto_delete  = true
     boot         = true
     type         = var.disk_type
+    disk_encryption_key {
+      kms_key_self_link = google_kms_crypto_key.vm_instance_key.id
+    }
+
   }
+
 
   network_interface {
     network    = google_compute_network.virtual_private_cloud.id
@@ -154,7 +171,8 @@ EOT
   depends_on = [
     google_compute_network.virtual_private_cloud,
     google_compute_firewall.deny_traffic_to_ssh_rule,
-    google_service_account.service_account
+    google_service_account.service_account,
+    google_kms_crypto_key_iam_binding.vm_instance_binding
   ]
 
   tags = ["web-instance"]
@@ -261,7 +279,8 @@ resource "google_sql_database_instance" "postgres_db_instance" {
   database_version    = var.database_version
   deletion_protection = false
 
-  depends_on = [google_service_networking_connection.default]
+  depends_on          = [google_service_networking_connection.default]
+  encryption_key_name = gigoogle_kms_crypto_key.sql_key.id
 
   settings {
     tier = var.database_instance_tier
@@ -383,14 +402,20 @@ locals {
 }
 
 
-data "google_storage_bucket" "cloud_function_bucket_webapp" {
-  name = var.google_storage_bucket_name
+resource "google_storage_bucket" "cloud_function_bucket_webapp" {
+  name     = var.google_storage_bucket_name
+  location = var.region
+  encryption {
+    default_kms_key_name = google_kms_crypto_key.storage_bucket_key.id
+  }
+  depends_on = [google_kms_crypto_key_iam_binding.storage_bucket_binding]
 }
 
-data "google_storage_bucket_object" "cloud_function_bucket_webapp_object" {
-  bucket     = data.google_storage_bucket.cloud_function_bucket_webapp.name
+resource "google_storage_bucket_object" "cloud_function_bucket_webapp_object" {
+  bucket     = google_storage_bucket.cloud_function_bucket_webapp.name
   name       = var.bucket_object_file_name
-  depends_on = [data.google_storage_bucket.cloud_function_bucket_webapp]
+  source     = "./cloudfunc.zip"
+  depends_on = [google_storage_bucket.cloud_function_bucket_webapp]
 }
 resource "google_cloudfunctions2_function" "cloud_function" {
   name        = var.cloud_function_name
@@ -402,8 +427,8 @@ resource "google_cloudfunctions2_function" "cloud_function" {
     entry_point = var.cloud_function_entry_point
     source {
       storage_source {
-        bucket = data.google_storage_bucket.cloud_function_bucket_webapp.name
-        object = data.google_storage_bucket_object.cloud_function_bucket_webapp_object.name
+        bucket = google_storage_bucket.cloud_function_bucket_webapp.name
+        object = google_storage_bucket_object.cloud_function_bucket_webapp_object.name
       }
     }
   }
@@ -428,7 +453,7 @@ resource "google_cloudfunctions2_function" "cloud_function" {
 
   }
 
-  depends_on = [google_vpc_access_connector.vpc-connector, google_service_account.service_account_for_cloud_function, google_sql_database_instance.postgres_db_instance, data.google_storage_bucket_object.cloud_function_bucket_webapp_object]
+  depends_on = [google_vpc_access_connector.vpc-connector, google_service_account.service_account_for_cloud_function, google_sql_database_instance.postgres_db_instance, google_storage_bucket_object.cloud_function_bucket_webapp_object]
 }
 
 
@@ -437,4 +462,73 @@ resource "google_vpc_access_connector" "vpc-connector" {
   ip_cidr_range = var.vpc_connector_cidr_range
   network       = google_compute_network.virtual_private_cloud.id
   depends_on    = [google_compute_network.virtual_private_cloud]
+}
+
+resource "random_string" "random" {
+  length  = 4
+  special = false
+  numeric = false
+  upper   = false
+}
+
+resource "google_kms_key_ring" "regional_keyring" {
+  name     = "regional-${random_string.random.result}-keyring"
+  location = var.region
+}
+
+
+resource "google_project_service_identity" "gcp_sa_cloud_sql" {
+  provider = google-beta
+  service  = "sqladmin.googleapis.com"
+}
+resource "google_kms_crypto_key" "sql_key" {
+  name                       = "sql-${random_string.random.result}-key"
+  key_ring                   = google_kms_key_ring.regional_keyring.id
+  rotation_period            = "2592000s"
+  destroy_scheduled_duration = "86400s"
+}
+
+resource "google_kms_crypto_key_iam_binding" "crypto_key" {
+  crypto_key_id = google_kms_crypto_key.sql_key.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+
+  members = [
+    "serviceAccount:${google_project_service_identity.gcp_sa_cloud_sql.email}",
+  ]
+}
+
+data "google_storage_project_service_account" "gcs_account" {
+}
+
+resource "google_kms_crypto_key" "storage_bucket_key" {
+  name                       = "storage-bucket-${random_string.random.result}-key"
+  key_ring                   = google_kms_key_ring.regional_keyring.id
+  rotation_period            = "2592000s"
+  destroy_scheduled_duration = "86400s"
+
+}
+
+resource "google_kms_crypto_key_iam_binding" "storage_bucket_binding" {
+  crypto_key_id = google_kms_crypto_key.storage_bucket_key.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+
+  members = ["serviceAccount:${data.google_storage_project_service_account.gcs_account.email_address}"]
+}
+
+data "google_project" "project" {
+}
+
+resource "google_kms_crypto_key" "vm_instance_key" {
+  name                       = "vm-instance-${random_string.random.result}-key"
+  key_ring                   = google_kms_key_ring.regional_keyring.id
+  rotation_period            = "2592000s"
+  destroy_scheduled_duration = "86400s"
+
+}
+
+resource "google_kms_crypto_key_iam_binding" "vm_instance_binding" {
+  crypto_key_id = google_kms_crypto_key.vm_instance_key.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+
+  members = ["serviceAccount:service-${data.google_project.project.number}@compute-system.iam.gserviceaccount.com"]
 }
