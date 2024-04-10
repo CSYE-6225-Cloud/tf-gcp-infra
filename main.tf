@@ -45,7 +45,7 @@ resource "google_compute_route" "route_resource" {
 resource "google_compute_firewall" "deny_traffic_to_ssh_rule" {
   name    = var.firewall_Rule_2
   network = google_compute_network.virtual_private_cloud.name
-  allow {
+  deny {
     protocol = var.firewall_2_protocol
     ports    = [var.firewall_2_port]
   }
