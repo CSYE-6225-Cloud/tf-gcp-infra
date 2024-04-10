@@ -280,7 +280,7 @@ resource "google_sql_database_instance" "postgres_db_instance" {
   deletion_protection = false
 
   depends_on          = [google_service_networking_connection.default]
-  encryption_key_name = gigoogle_kms_crypto_key.sql_key.id
+  encryption_key_name = google_kms_crypto_key.sql_key.id
 
   settings {
     tier = var.database_instance_tier
